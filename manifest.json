@@ -1,0 +1,23 @@
+{
+  "id": "./index.html",
+  "name": "Tablero de Vida Diario",
+  "short_name": "Tablero",
+  "description": "Plan diario inteligente generado con Claude a partir de tu horario y pendientes.",
+  "lang": "es",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1218",
+  "theme_color": "#0f1218",
+  "categories": ["productivity", "lifestyle"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Plan de hoy", "short_name": "Hoy", "url": "./index.html?tab=hoy", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Cerrar el día", "short_name": "Cierre", "url": "./index.html?tab=cierre", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}

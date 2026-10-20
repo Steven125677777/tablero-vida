@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tablero de Vida</title>
+<meta name="theme-color" content="#0f1218">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: { ink:'#0f1218', panel:'#171b24', line:'#262c3a', mist:'#9aa3b5', iris:'#a8a4ff', sand:'#f2c46d', rosa:'#ff8a9b', menta:'#5fd3c4' },
+    fontFamily: { sans: ['Manrope','system-ui','sans-serif'] }
+  } }
+};
+</script>
+<style>
+  html, body { background:#0f1218; }
+  body { padding-top: env(safe-area-inset-top, 0px); -webkit-tap-highlight-color: transparent; }
+  input[type="time"], select, textarea, input[type="password"], input[type="text"] { color-scheme: dark; }
+  .field { background:#0f1218; border:1px solid #262c3a; border-radius:12px; color:#e7e9ee; }
+  .field:focus { outline:2px solid #a8a4ff; outline-offset:1px; }
+  .tab-btn[aria-selected="true"] { color:#a8a4ff; }
+  .tab-btn[aria-selected="true"] .dot { background:#a8a4ff; }
+  .tab-btn .dot.attn { background:#f2c46d; }
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  button:focus-visible { outline:2px solid #a8a4ff; outline-offset:2px; }
+  .bar-fill { transition: width .25s ease; }
+</style>
+</head>
+<body class="font-sans text-[#e7e9ee] min-h-screen">
+
+<header class="px-5 pt-5 pb-3 max-w-2xl mx-auto">
+  <p id="fecha" class="text-sm text-mist"></p>
+  <h1 class="text-2xl font-extrabold tracking-tight">Tablero de Vida</h1>
+</header>
+
+<main class="px-4 pb-32 max-w-2xl mx-auto">
+
+  <!-- HOY -->
+  <section id="tab-hoy" class="space-y-4">
+    <button id="btnGenerar" class="w-full rounded-2xl bg-iris text-ink font-bold py-4 text-base active:scale-[0.99] transition disabled:opacity-60">
+      Generar plan de hoy
+    </button>
+    <button id="btnReorg" class="w-full rounded-2xl border border-sand text-sand font-bold py-3 text-sm active:scale-[0.99] transition disabled:opacity-60">
+      Día caótico: reorganizar lo que queda
+    </button>
+    <details class="rounded-2xl border border-line bg-panel p-4">
+      <summary class="font-semibold cursor-pointer">Modo gratis (sin API)</summary>
+      <div class="mt-3 space-y-3">
+        <p class="text-sm text-mist leading-relaxed">No cuesta nada. Elige una forma:</p>
+        <button id="btnLocal" class="w-full rounded-xl bg-menta text-ink font-semibold py-3 text-sm">Plan local sin IA</button>
+        <div class="rounded-xl border border-line p-3 space-y-2">
+          <p class="text-sm text-mist leading-relaxed">Con Claude gratis en claude.ai: copia el prompt, pégalo allá, copia la respuesta y cárgala aquí.</p>
+          <button id="btnCopiarPrompt" class="w-full rounded-xl border border-iris text-iris font-semibold py-3 text-sm">1. Copiar prompt</button>
+          <a href="https://claude.ai/new" target="_blank" rel="noopener" class="block text-center text-sm text-iris font-semibold py-2">Abrir claude.ai</a>
+          <button id="btnPegarResp" class="w-full rounded-xl border border-iris text-iris font-semibold py-3 text-sm">2. Cargar respuesta de Claude</button>
+        </div>
+      </div>
+    </details>
+    <p id="avisoManana" class="hidden text-sm rounded-xl border border-line bg-panel px-3 py-2 text-mist"></p>
+    <p id="estado" class="text-sm text-mist min-h-[1.25rem]" role="status"></p>
+    <div id="dashboard" class="space-y-4"></div>
+  </section>
+
+  <!-- HORARIO -->
+  <section id="tab-horario" class="space-y-4 hidden">
+    <div>
+      <h2 class="text-lg font-bold">Tu semana</h2>
+      <p class="text-sm text-mist">Elige un día y ajusta sus bloques. Los bloques fijos (clases y trote) no se tocan al planear, y la rutina sin conexión sale de aquí. Los cambios se guardan solos.</p>
+    </div>
+    <div id="diasSel" class="flex gap-2 overflow-x-auto pb-1" role="tablist"></div>
+    <div id="schedule" class="space-y-3"></div>
+    <p id="horarioEstado" class="text-sm text-mist min-h-[1.25rem]" role="status"></p>
+    <button id="btnAddBloque" class="w-full rounded-xl border border-line text-iris font-semibold py-3 text-sm">Añadir bloque</button>
+    <div class="flex gap-3">
+      <button id="btnGuardarHorario" class="flex-1 rounded-xl bg-iris text-ink font-semibold py-3">Guardar día</button>
+      <button id="btnRestaurar" class="rounded-xl border border-line text-mist font-semibold py-3 px-4">Restaurar este día</button>
+    </div>
+  </section>
+
+  <!-- DATOS -->
+  <section id="tab-datos" class="space-y-4 hidden">
+    <div>
+      <h2 class="text-lg font-bold">Lo que tienes hoy</h2>
+      <p class="text-sm text-mist">Pega tal cual. Antes de enviar se eliminan espacios, líneas vacías, firmas y citas de correo.</p>
+    </div>
+    <div>
+      <div class="flex items-center justify-between">
+        <label for="inTareas" class="text-sm font-semibold">Tareas pendientes</label>
+        <button type="button" data-paste="#inTareas" class="text-sm font-semibold text-iris rounded-lg border border-line px-3 py-1">Pegar portapapeles</button>
+      </div>
+      <textarea id="inTareas" rows="5" class="field w-full mt-1 p-3 text-sm" placeholder="Entregar taller de programación, repasar SQL, pagar internet..."></textarea>
+    </div>
+    <div>
+      <div class="flex items-center justify-between">
+        <label for="inEventos" class="text-sm font-semibold">Eventos del calendario</label>
+        <button type="button" data-paste="#inEventos" class="text-sm font-semibold text-iris rounded-lg border border-line px-3 py-1">Pegar portapapeles</button>
+      </div>
+      <textarea id="inEventos" rows="4" class="field w-full mt-1 p-3 text-sm" placeholder="Clase de Algoritmos 10:00, reunión de grupo 15:30..."></textarea>
+    </div>
+    <div>
+      <div class="flex items-center justify-between">
+        <label for="inCorreos" class="text-sm font-semibold">Correos o alertas</label>
+        <button type="button" data-paste="#inCorreos" class="text-sm font-semibold text-iris rounded-lg border border-line px-3 py-1">Pegar portapapeles</button>
+      </div>
+      <textarea id="inCorreos" rows="5" class="field w-full mt-1 p-3 text-sm" placeholder="Pega correos o avisos relevantes"></textarea>
+    </div>
+    <label class="block">
+      <span class="text-sm font-semibold">Estado de ánimo o enfoque (opcional)</span>
+      <input id="inNotas" type="text" class="field w-full mt-1 p-3 text-sm" placeholder="Ej: poco sueño, quiero avanzar en el proyecto">
+    </label>
+    <p id="ahorro" class="text-sm text-mist"></p>
+    <button id="btnVaciar" class="w-full rounded-xl border border-line text-mist font-semibold py-3 text-sm">Vaciar campos</button>
+  </section>
+
+  <!-- CIERRE -->
+  <section id="tab-cierre" class="space-y-4 hidden">
+    <div>
+      <h2 class="text-lg font-bold">Cierre del día</h2>
+      <p class="text-sm text-mist">Registra lo que lograste y elige qué pasa al plan de mañana.</p>
+    </div>
+    <div id="cierreBox" class="space-y-4"></div>
+    <div id="historial"></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section id="tab-ajustes" class="space-y-4 hidden">
+    <div>
+      <h2 class="text-lg font-bold">Conexión con Claude</h2>
+      <p class="text-sm text-mist">La clave se guarda solo en este dispositivo (LocalStorage) y se envía únicamente a api.anthropic.com.</p>
+    </div>
+    <label class="block">
+      <span class="text-sm font-semibold">API Key de Anthropic</span>
+      <div class="flex gap-2 mt-1">
+        <input id="apiKey" type="password" autocomplete="off" spellcheck="false" class="field flex-1 p-3 text-sm" placeholder="sk-ant-...">
+        <button id="btnVer" class="rounded-xl border border-line text-mist px-4 text-sm font-semibold" type="button">Ver</button>
+      </div>
+    </label>
+    <div class="flex gap-3">
+      <button id="btnGuardarKey" class="flex-1 rounded-xl bg-iris text-ink font-semibold py-3">Guardar clave</button>
+      <button id="btnBorrarKey" class="rounded-xl border border-line text-rosa font-semibold py-3 px-4">Borrar</button>
+    </div>
+    <p id="keyEstado" class="text-sm text-mist" role="status"></p>
+
+    <div class="rounded-2xl bg-panel border border-line p-4 space-y-3">
+      <h3 class="font-bold">Avisos al iniciar cada bloque</h3>
+      <p class="text-sm text-mist leading-relaxed">Suenan con la app abierta o en segundo plano. Con la app cerrada dependen del sistema: en Android con la app instalada suelen llegar, pero sin garantía de hora exacta.</p>
+      <div class="flex gap-3">
+        <button id="btnNotif" class="flex-1 rounded-xl bg-iris text-ink font-semibold py-3 text-sm">Activar avisos</button>
+        <button id="btnProbar" class="rounded-xl border border-line text-mist font-semibold py-3 px-4 text-sm">Probar</button>
+      </div>
+      <p id="notifEstado" class="text-sm text-mist" role="status"></p>
+    </div>
+
+    <button id="btnInstalar" class="hidden w-full rounded-xl border border-iris text-iris font-semibold py-3">Instalar en pantalla de inicio</button>
+    <p class="text-xs text-mist leading-relaxed">
+      Aviso: una clave guardada en el navegador queda expuesta a quien use este dispositivo. Usa una clave dedicada con límite de gasto bajo en console.anthropic.com y no compartas la app con tu clave dentro.
+    </p>
+  </section>
+</main>
+
+<nav class="fixed bottom-0 inset-x-0 bg-panel/95 backdrop-blur border-t border-line" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
+  <div class="max-w-2xl mx-auto grid grid-cols-5" role="tablist">
+    <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="hoy" aria-selected="true"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Hoy</button>
+    <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="horario" aria-selected="false"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Horario</button>
+    <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="datos" aria-selected="false"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Datos</button>
+    <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="cierre" aria-selected="false"><span id="dotCierre" class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Cierre</button>
+    <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="ajustes" aria-selected="false"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Ajustes</button>
+  </div>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>
