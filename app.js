@@ -6,7 +6,7 @@ const MAX_CHARS = 6000;
 
 const LS = {
   key: 'tv_api_key', week: 'tv_week', draft: 'tv_draft', state: 'tv_state',
-  manana: 'tv_manana', hist: 'tv_history', notif: 'tv_notif', notified: 'tv_notified',
+  manana: 'tv_manana', recs: 'tv_recs', hist: 'tv_history', notif: 'tv_notif', notified: 'tv_notified',
 };
 
 // [nombre, inicio, fin, energía, fijo]  (fijo = clase o hábito que no se mueve)
@@ -85,11 +85,12 @@ function persist() { saveJSON(LS.state, state); syncSW(); }
 /* ---------- Pestañas ---------- */
 document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
 function showTab(name) {
-  const tabs = ['hoy', 'horario', 'datos', 'cierre', 'ajustes'];
+  const tabs = ['hoy', 'horario', 'datos', 'fechas', 'cierre', 'ajustes'];
   if (!tabs.includes(name)) name = 'hoy';
   tabs.forEach((t) => $('#tab-' + t).classList.toggle('hidden', t !== name));
   document.querySelectorAll('.tab-btn').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
   if (name === 'cierre') renderCierre();
+  if (name === 'fechas') renderRecs();
   window.scrollTo({ top: 0 });
 }
 
@@ -310,6 +311,7 @@ Reglas:
 - No inventes tareas, fechas ni pagos. Si un bloque no tiene un pendiente que encaje, no lo incluyas.
 - Límite estricto: mision_principal máx 15 palabras; máx 5 elementos en "bloques" (tarea y tip máx 6 palabras); máx 3 tareas_secundarias, 2 alertas_urgentes y 2 sugerencias_espacios_libres de máx 8 palabras.
 - sugerencias_espacios_libres: actividades breves para huecos entre bloques (repaso, pausa activa, avance de pendientes o descanso).
+- Los "Vencimientos próximos" de hoy o mañana van en alertas_urgentes y se priorizan en el plan.
 - Una sola misión principal.
 Metas diarias de referencia: programación 1.5-2 h, estudio universitario 1.5-2 h, inglés 45 min, fuerza 45 min, lectura 30 min.
 Formato exacto, en este orden de claves ("h" = hora de inicio del bloque):
@@ -324,6 +326,7 @@ function buildUserMessage(manana, blocks) {
   return [
     `Ahora: ${now}`, blocksLine(blocks),
     manana.length ? `Pendientes de ayer:\n${manana.join('\n')}` : '',
+    recsSection(7),
     section('Tareas pendientes', i.tareas), section('Eventos del calendario', i.eventos),
     section('Correos y alertas', i.correos), section('Contexto', i.notas),
   ].filter(Boolean).join('\n\n');
@@ -334,7 +337,7 @@ function buildReorgMessage(blocks, pending, completed) {
     `Hora actual: ${nowHHMM()} (${DIAS[new Date().getDay()]})`, blocksLine(blocks),
     `Pendientes por hacer:\n${pending.length ? pending.join('\n') : '(ninguno)'}`,
     completed.length ? `Ya completado hoy:\n${completed.join('\n')}` : '',
-    section('Eventos del calendario', i.eventos), section('Contexto', i.notas),
+    recsSection(2), section('Eventos del calendario', i.eventos), section('Contexto', i.notas),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -452,7 +455,8 @@ function setPlan(plan) {
 // Reparte tus pendientes sin IA: tareas complejas a bloques de energía alta, el resto a energía baja
 function localPlan() {
   const blocks = dayBlocks(new Date().getDay()), n = nowHHMM();
-  const tareas = [...loadJSON(LS.manana, []), ...cleanText($('#inTareas').value).split('\n').filter(Boolean)].slice(0, 10);
+  const venc = recsPendientes(2).map((r) => `${r.titulo} (${cuando(r.fecha).toLowerCase()})`);
+  const tareas = [...venc, ...loadJSON(LS.manana, []), ...cleanText($('#inTareas').value).split('\n').filter(Boolean)].slice(0, 10);
   const libres = blocks.filter((b) => !b.fijo && b.fin > n && /estudio|taller|programaci|deep|proyect|ingl|repaso/i.test(b.nombre));
   const pools = { alta: libres.filter((b) => b.energia === 'alta'), baja: libres.filter((b) => b.energia !== 'alta') };
   const bloques = [], sobran = [];
@@ -461,7 +465,7 @@ function localPlan() {
     const b = pools[pref].shift() || pools[otro].shift();
     if (b) bloques.push({ h: b.inicio, tarea: t.slice(0, 60), tip: '' }); else sobran.push(t.slice(0, 60));
   }
-  const alertas = [];
+  const alertas = recsPendientes(1).map((r) => `${r.titulo}: ${cuando(r.fecha).toLowerCase()}`).slice(0, 2);
   if (!tareas.length) alertas.push('Sin pendientes: pégalos en la pestaña Datos.');
   else if (sobran.length) alertas.push('No quedan bloques libres para todo. Revisa las tareas secundarias.');
   return mergePlan({
@@ -570,6 +574,86 @@ $('#dashboard').addEventListener('change', (e) => {
   persist(); updateProgress();
 });
 
+/* ---------- Fechas y recordatorios ---------- */
+const loadRecs = () => loadJSON(LS.recs, []);
+function saveRecs(list) { saveJSON(LS.recs, list); syncSW(); }
+const diasHasta = (f) => Math.round((new Date(f + 'T00:00:00') - new Date(today() + 'T00:00:00')) / 864e5);
+const fechaCorta = (f) => new Date(f + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
+function cuando(f) {
+  const d = diasHasta(f);
+  if (d < 0) return `Venció hace ${-d} día${d === -1 ? '' : 's'}`;
+  if (d === 0) return 'Vence hoy';
+  if (d === 1) return 'Vence mañana';
+  return `Vence en ${d} días (${fechaCorta(f)})`;
+}
+const corto = (f) => { const d = diasHasta(f); return d < 0 ? 'vencido' : d === 0 ? 'hoy' : d === 1 ? 'mañana' : `${d} días`; };
+const colorCuando = (f) => { const d = diasHasta(f); return d <= 0 ? 'text-rosa' : d === 1 ? 'text-sand' : 'text-mist'; };
+const recsPendientes = (maxDias) => loadRecs().filter((r) => !r.hecho && diasHasta(r.fecha) <= maxDias).sort((a, b) => a.fecha.localeCompare(b.fecha));
+function recsSection(maxDias) {
+  const l = recsPendientes(maxDias);
+  return l.length ? `Vencimientos próximos:\n${l.map((r) => `${r.titulo}: ${cuando(r.fecha).toLowerCase()}`).join('\n')}` : '';
+}
+// Disparadores: la hora del aviso el día de la fecha y, si se pidió, las 18:00 del día anterior
+function triggersDe(r) {
+  const t = [['dia', new Date(`${r.fecha}T${r.hora || '08:00'}:00`).getTime()]];
+  if (r.pre) { const d = new Date(`${r.fecha}T18:00:00`); d.setDate(d.getDate() - 1); t.push(['pre', d.getTime()]); }
+  return t;
+}
+function checkRecs() {
+  if (!notifOn()) return;
+  const list = loadRecs(), now = Date.now(); let changed = false;
+  for (const r of list) {
+    if (r.hecho) continue;
+    const end = new Date(r.fecha + 'T23:59:59').getTime(), ya = r.enviados || [];
+    const due = triggersDe(r).filter(([k, t]) => now >= t && now <= end && !ya.includes(k)).sort((x, y) => y[1] - x[1]);
+    if (!due.length) continue;
+    r.enviados = [...ya, ...due.map((x) => x[0])]; changed = true;
+    showNotif(`Recordatorio: ${r.titulo}`, cuando(r.fecha), `rec-${r.id}-${due[0][0]}`, './index.html?tab=fechas');
+  }
+  if (changed) saveJSON(LS.recs, list);
+}
+const recsParaSW = () => loadRecs().filter((r) => !r.hecho).map(({ id, titulo, fecha, hora, pre, enviados }) => ({ id, titulo, fecha, hora, pre, enviados: enviados || [] }));
+
+function renderRecHoy() {
+  const l = recsPendientes(7), box = $('#recHoy');
+  box.classList.toggle('hidden', !l.length);
+  box.innerHTML = l.length ? `<h3 class="font-bold mb-3">Vencimientos próximos</h3><ul class="space-y-2">${l.slice(0, 6).map((r) => `<li class="flex justify-between gap-3 text-sm"><span>${esc(r.titulo)}</span><span class="shrink-0 font-semibold ${colorCuando(r.fecha)}">${esc(corto(r.fecha))}</span></li>`).join('')}</ul>` : '';
+}
+function renderRecs() {
+  const all = loadRecs().slice().sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const pend = all.filter((r) => !r.hecho), hechos = all.filter((r) => r.hecho).slice(-5);
+  const item = (r) => `<div class="rounded-2xl bg-panel border border-line p-4 flex items-start gap-3" data-rid="${esc(r.id)}">
+    <input type="checkbox" data-rec-done ${r.hecho ? 'checked' : ''} class="mt-1 w-5 h-5 accent-[#5fd3c4] shrink-0" aria-label="Marcar como hecho">
+    <div class="flex-1 min-w-0"><p class="font-semibold ${r.hecho ? 'line-through opacity-60' : ''}">${esc(r.titulo)}</p>
+      <p class="text-sm ${r.hecho ? 'text-mist' : colorCuando(r.fecha)}">${r.hecho ? esc(fechaCorta(r.fecha)) : esc(cuando(r.fecha))}</p>
+      <p class="text-xs text-mist mt-0.5">Aviso a las ${esc(r.hora || '08:00')}${r.pre ? ' y el día antes a las 18:00' : ''}</p></div>
+    <button type="button" data-rec-del class="text-sm text-rosa font-semibold px-2 py-1">Borrar</button></div>`;
+  $('#recLista').innerHTML = (pend.length ? pend.map(item).join('') : '<p class="text-sm text-mist">Aún no tienes recordatorios.</p>')
+    + (hechos.length ? '<h3 class="font-bold pt-2">Hechos</h3>' + hechos.map(item).join('') : '');
+  $('#recAviso').textContent = notifOn() ? '' : 'Activa los avisos en Ajustes para recibir notificaciones.';
+}
+$('#btnAddRec').addEventListener('click', () => {
+  const titulo = $('#recTitulo').value.trim(), fecha = $('#recFecha').value;
+  if (!titulo) return toast('Escribe qué es', true);
+  if (!fecha) return toast('Elige una fecha', true);
+  const r = { id: uid(), titulo: titulo.slice(0, 80), fecha, hora: $('#recHora').value || '08:00', pre: $('#recPre').checked, hecho: false, enviados: [] };
+  r.enviados = triggersDe(r).filter(([, t]) => t <= Date.now()).map(([k]) => k); // no avisar lo que ya pasó
+  saveRecs([...loadRecs(), r]);
+  $('#recTitulo').value = ''; renderRecs(); renderRecHoy(); toast('Recordatorio guardado');
+});
+$('#recLista').addEventListener('click', (e) => {
+  const del = e.target.closest('[data-rec-del]');
+  if (!del) return;
+  const id = del.closest('[data-rid]').dataset.rid;
+  saveRecs(loadRecs().filter((r) => r.id !== id)); renderRecs(); renderRecHoy();
+});
+$('#recLista').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-rec-done]');
+  if (!cb) return;
+  const id = cb.closest('[data-rid]').dataset.rid;
+  saveRecs(loadRecs().map((r) => (r.id === id ? { ...r, hecho: cb.checked } : r))); renderRecs(); renderRecHoy();
+});
+
 /* ---------- Cierre del día ---------- */
 let cierrePend = [];
 function renderCierre() {
@@ -631,10 +715,10 @@ function blockList() {
     return r && { hhmm: r[0], title: `${b.tipo || 'Bloque'}: ${b.actividad_principal}`, body: `${b.bloque}. ${b.sugerencia_optimizacion || ''}`.trim() };
   }).filter(Boolean);
 }
-async function showNotif(title, body, tag) {
+async function showNotif(title, body, tag, url = './index.html?tab=hoy') {
   try {
     const reg = await navigator.serviceWorker.ready;
-    await reg.showNotification(title, { body, tag, icon: 'icon-192.png', badge: 'icon-192.png', vibrate: [120, 60, 120], data: { url: './index.html?tab=hoy' } });
+    await reg.showNotification(title, { body, tag, icon: 'icon-192.png', badge: 'icon-192.png', vibrate: [120, 60, 120], data: { url } });
   } catch { try { new Notification(title, { body, tag }); } catch { /* sin soporte */ } }
 }
 function checkBlocks() {
@@ -650,7 +734,7 @@ function checkBlocks() {
 }
 async function syncSW() { // copia el cronograma al service worker (IndexedDB) para periodicsync
   if (!('serviceWorker' in navigator)) return;
-  try { const reg = await navigator.serviceWorker.ready; reg.active?.postMessage({ type: 'SCHEDULE', dia: state?.dia, enabled: notifOn(), blocks: blockList() }); } catch { /* ignorar */ }
+  try { const reg = await navigator.serviceWorker.ready; reg.active?.postMessage({ type: 'SCHEDULE', dia: state?.dia, enabled: notifOn(), blocks: blockList(), recs: recsParaSW() }); } catch { /* ignorar */ }
 }
 async function registerPeriodic() {
   try { const reg = await navigator.serviceWorker.ready; if ('periodicSync' in reg) await reg.periodicSync.register('check-blocks', { minInterval: 15 * 60 * 1000 }); } catch { /* opcional */ }
@@ -711,11 +795,11 @@ function toast(msg, isError = false) {
   $('#inCorreos').value = d.correos || ''; $('#inNotas').value = d.notas || '';
   updateSavings(); updateManana(); updateCierreBadge(); refreshNotifUI();
   if (localStorage.getItem(LS.key)) $('#keyEstado').textContent = 'Hay una clave guardada en este dispositivo.';
-  renderDashboard();
+  renderDashboard(); renderRecHoy(); $('#recFecha').min = today();
   if (state?.fecha) $('#estado').textContent = `Último plan: ${new Date(state.fecha).toLocaleString('es-CO', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`;
   showTab(new URLSearchParams(location.search).get('tab') || 'hoy');
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(syncSW).catch((e) => console.warn('SW', e));
-  setInterval(() => { checkBlocks(); updateCierreBadge(); }, 30000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkBlocks(); });
-  checkBlocks();
+  setInterval(() => { checkBlocks(); checkRecs(); updateCierreBadge(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkBlocks(); checkRecs(); renderRecHoy(); } });
+  checkBlocks(); checkRecs();
 })();

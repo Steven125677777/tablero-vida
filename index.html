@@ -70,6 +70,7 @@ tailwind.config = {
       </div>
     </details>
     <p id="avisoManana" class="hidden text-sm rounded-xl border border-line bg-panel px-3 py-2 text-mist"></p>
+    <div id="recHoy" class="hidden rounded-2xl bg-panel border border-line p-4"></div>
     <p id="estado" class="text-sm text-mist min-h-[1.25rem]" role="status"></p>
     <div id="dashboard" class="space-y-4"></div>
   </section>
@@ -125,6 +126,27 @@ tailwind.config = {
     <button id="btnVaciar" class="w-full rounded-xl border border-line text-mist font-semibold py-3 text-sm">Vaciar campos</button>
   </section>
 
+  <!-- FECHAS -->
+  <section id="tab-fechas" class="space-y-4 hidden">
+    <div>
+      <h2 class="text-lg font-bold">Fechas y recordatorios</h2>
+      <p class="text-sm text-mist leading-relaxed">Guarda entregas, pagos y citas con su fecha. Te aviso el mismo día (y el día antes si quieres), y entran en tu plan cuando se acercan.</p>
+    </div>
+    <div class="rounded-2xl bg-panel border border-line p-4 space-y-3">
+      <label class="block text-sm font-semibold">¿Qué es?
+        <input id="recTitulo" type="text" maxlength="80" class="field w-full mt-1 p-3 text-sm font-normal" placeholder="Taller de Álgebra">
+      </label>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="text-xs text-mist">Fecha<input id="recFecha" type="date" class="field w-full mt-1 p-2 text-base text-[#e7e9ee]"></label>
+        <label class="text-xs text-mist">Hora del aviso<input id="recHora" type="time" value="08:00" class="field w-full mt-1 p-2 text-base text-[#e7e9ee]"></label>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-mist"><input id="recPre" type="checkbox" checked class="accent-[#a8a4ff] w-4 h-4"> Avisar también el día antes (6:00 p. m.)</label>
+      <button id="btnAddRec" class="w-full rounded-xl bg-iris text-ink font-semibold py-3">Guardar recordatorio</button>
+    </div>
+    <p id="recAviso" class="text-sm text-sand" role="status"></p>
+    <div id="recLista" class="space-y-3"></div>
+  </section>
+
   <!-- CIERRE -->
   <section id="tab-cierre" class="space-y-4 hidden">
     <div>
@@ -155,7 +177,7 @@ tailwind.config = {
     <p id="keyEstado" class="text-sm text-mist" role="status"></p>
 
     <div class="rounded-2xl bg-panel border border-line p-4 space-y-3">
-      <h3 class="font-bold">Avisos al iniciar cada bloque</h3>
+      <h3 class="font-bold">Avisos de bloques y recordatorios</h3>
       <p class="text-sm text-mist leading-relaxed">Suenan con la app abierta o en segundo plano. Con la app cerrada dependen del sistema: en Android con la app instalada suelen llegar, pero sin garantía de hora exacta.</p>
       <div class="flex gap-3">
         <button id="btnNotif" class="flex-1 rounded-xl bg-iris text-ink font-semibold py-3 text-sm">Activar avisos</button>
@@ -172,10 +194,11 @@ tailwind.config = {
 </main>
 
 <nav class="fixed bottom-0 inset-x-0 bg-panel/95 backdrop-blur border-t border-line" style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-  <div class="max-w-2xl mx-auto grid grid-cols-5" role="tablist">
+  <div class="max-w-2xl mx-auto grid grid-cols-6" role="tablist">
     <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="hoy" aria-selected="true"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Hoy</button>
     <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="horario" aria-selected="false"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Horario</button>
     <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="datos" aria-selected="false"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Datos</button>
+    <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="fechas" aria-selected="false"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Fechas</button>
     <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="cierre" aria-selected="false"><span id="dotCierre" class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Cierre</button>
     <button class="tab-btn py-3 text-xs font-semibold text-mist flex flex-col items-center gap-1" role="tab" data-tab="ajustes" aria-selected="false"><span class="dot w-1.5 h-1.5 rounded-full bg-transparent"></span>Ajustes</button>
   </div>

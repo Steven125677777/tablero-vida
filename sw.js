@@ -1,11 +1,11 @@
-const CACHE = 'tablero-v4'; // sube el número al publicar cambios
+const CACHE = 'tablero-v5'; // sube el número al publicar cambios
 const SHELL = [
   './', './index.html', './app.js', './manifest.json',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png',
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -78,9 +78,41 @@ async function checkBlocks() {
   await idbSet('notified', notified);
 }
 
+
+/* ---------- Recordatorios con fecha ---------- */
+const cuandoSW = (f) => {
+  const hoy = new Date().toLocaleDateString('en-CA');
+  const d = Math.round((new Date(f + 'T00:00:00') - new Date(hoy + 'T00:00:00')) / 864e5);
+  return d <= 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : `Vence el ${f}`;
+};
+async function checkRecs() {
+  const s = await idbGet('schedule');
+  if (!s || !s.enabled || !Array.isArray(s.recs)) return;
+  const sent = (await idbGet('recSent')) || {}, now = Date.now();
+  let changed = false;
+  for (const r of s.recs) {
+    const ya = [...(r.enviados || []), ...(sent[r.id] || [])];
+    const end = new Date(r.fecha + 'T23:59:59').getTime();
+    const trig = [['dia', new Date(`${r.fecha}T${r.hora || '08:00'}:00`).getTime()]];
+    if (r.pre) { const d = new Date(`${r.fecha}T18:00:00`); d.setDate(d.getDate() - 1); trig.push(['pre', d.getTime()]); }
+    const due = trig.filter(([k, t]) => now >= t && now <= end && !ya.includes(k)).sort((a, b) => b[1] - a[1]);
+    if (!due.length) continue;
+    sent[r.id] = [...ya, ...due.map((x) => x[0])]; changed = true;
+    await self.registration.showNotification(`Recordatorio: ${r.titulo}`, {
+      body: cuandoSW(r.fecha), tag: `rec-${r.id}-${due[0][0]}`, icon: 'icon-192.png', badge: 'icon-192.png',
+      data: { url: './index.html?tab=fechas' },
+    });
+  }
+  if (changed) await idbSet('recSent', sent);
+}
+async function checkAll() {
+  try { await checkBlocks(); } catch { /* ignorar */ }
+  try { await checkRecs(); } catch { /* ignorar */ }
+}
+
 // Mejor esfuerzo: solo Chrome en Android con la app instalada, sin hora exacta
 self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'check-blocks') event.waitUntil(checkBlocks());
+  if (event.tag === 'check-blocks') event.waitUntil(checkAll());
 });
 
 self.addEventListener('notificationclick', (event) => {
